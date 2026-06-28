@@ -113,3 +113,17 @@ npm run all-done
 ```
 
 The security suite follows the Friendly Ledger pattern: it verifies anonymous users cannot call app functions or read/mutate app tables directly, team non-members cannot see or mutate another team's backlog, member-driven invitations require explicit acceptance, worker claims are backlog-scoped, and concurrent worker claims cannot lease the same ready item twice.
+
+## Work Assigner CLI
+
+The first autonomous runner lives in `work-assigner-cli/`.
+
+It is intentionally conservative: one process claims at most one task at a time, and it only obtains work by calling the worker API's `claim_next_work_item` action. The database decides which `ready` item to lease, ordered by priority rank and creation time.
+
+Build/run:
+
+```sh
+npm run work-assigner -- --once --backlog-id <backlog-id> --worker-secret local-dev-worker-secret
+```
+
+Use `--loop` for polling mode and `--dry-run` to validate configuration without claiming work.

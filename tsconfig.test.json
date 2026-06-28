@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node", "vitest/globals"]
   },
-  "include": ["tests", "src", "common", "lib"]
+  "include": ["tests", "src", "common", "lib", "work-assigner-cli/src"]
 }

@@ -1,5 +1,7 @@
 node_modules
 dist
+work-assigner-cli/dist
+.work-assigner
 playwright-report
 test-results
 .DS_Store
