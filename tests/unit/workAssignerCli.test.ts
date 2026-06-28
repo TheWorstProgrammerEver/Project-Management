@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseConfig } from '../../work-assigner-cli/src/config'
 import { loadCliEnvironment } from '../../work-assigner-cli/src/env'
@@ -94,16 +94,19 @@ const api = (claimed: WorkerClaim | null): WorkerApi & {
   claims: ClaimNextWorkItemParams[]
   completed: string[]
   failed: string[]
+  resultUrls: string[]
 } => ({
   claims: [],
   completed: [],
   failed: [],
+  resultUrls: [],
   async claimNextWorkItem(params) {
     this.claims.push(params)
     return claimed
   },
-  async completeWorkItem(leaseToken) {
+  async completeWorkItem(leaseToken, _resultSummary, resultUrl) {
     this.completed.push(leaseToken)
+    this.resultUrls.push(resultUrl ?? '')
   },
   async failWorkItem(leaseToken) {
     this.failed.push(leaseToken)
@@ -116,11 +119,22 @@ const api = (claimed: WorkerClaim | null): WorkerApi & {
   }
 })
 
-const executor = (exitCode: number, stdoutTail: string): TaskExecutor & { prompts: string[] } => ({
+const executor = (
+  exitCode: number,
+  stdoutTail: string,
+  resultFileBody?: Record<string, unknown>
+): TaskExecutor & { prompts: string[]; resultFiles: string[] } => ({
   prompts: [],
+  resultFiles: [],
   async run(input: ExecuteTaskInput) {
     this.prompts.push(input.prompt)
+    this.resultFiles.push(input.environment.WORK_ASSIGNER_RESULT_FILE)
     await input.onChildPid(123456)
+
+    if (resultFileBody) {
+      await mkdir(dirname(input.environment.WORK_ASSIGNER_RESULT_FILE), { recursive: true })
+      await writeFile(input.environment.WORK_ASSIGNER_RESULT_FILE, JSON.stringify(resultFileBody))
+    }
 
     return {
       exitCode,
@@ -205,10 +219,13 @@ describe('work assigner config', () => {
 
 describe('work assigner prompt', () => {
   it('tells the child command to stay on the claimed work item', () => {
-    const prompt = createTaskPrompt(claim())
+    const prompt = createTaskPrompt(claim(), '/tmp/result.json')
 
     expect(prompt).toContain('already been atomically claimed')
     expect(prompt).toContain('Do not claim another backlog item')
+    expect(prompt).toContain('Do not call the Project Management worker API yourself')
+    expect(prompt).toContain('/tmp/result.json')
+    expect(prompt).toContain('"status":"blocked"')
     expect(prompt).toContain('Create the first autonomous worker loop')
     expect(prompt).toContain('- Tests pass')
   })
@@ -265,7 +282,11 @@ describe('work assigner runner', () => {
 
   it('completes the lease when the child command exits successfully', async () => {
     const fakeApi = api(claim())
-    const fakeExecutor = executor(0, 'Implemented and verified.')
+    const fakeExecutor = executor(0, 'unused stdout', {
+      resultUrl: 'https://example.com/pr/1',
+      status: 'completed',
+      summary: 'Implemented and verified from result file.'
+    })
     const stateStore = new MemoryStateStore()
 
     const result = await runOnce({
@@ -278,9 +299,69 @@ describe('work assigner runner', () => {
 
     expect(result).toEqual({ status: 'completed', workItemId: 'item-1' })
     expect(fakeApi.completed).toEqual(['lease-token'])
+    expect(fakeApi.resultUrls).toEqual(['https://example.com/pr/1'])
     expect(fakeApi.failed).toEqual([])
     expect(stateStore.state).toBeUndefined()
     expect(stateStore.writes.at(-1)?.childPid).toBe(123456)
+    expect(fakeExecutor.resultFiles[0]).toBe('/tmp/work-assigner/item-1-result.json')
+  })
+
+  it('blocks the item when the child writes a blocked result even if it exits successfully', async () => {
+    const fakeApi = api(claim())
+
+    const result = await runOnce({
+      api: fakeApi,
+      config: config(),
+      executor: executor(0, 'stdout says success', {
+        status: 'blocked',
+        summary: 'Need Ryan to message the Telegram bot first.'
+      }),
+      logger,
+      stateStore: new MemoryStateStore()
+    })
+
+    expect(result).toEqual({ status: 'failed', workItemId: 'item-1' })
+    expect(fakeApi.completed).toEqual([])
+    expect(fakeApi.failed).toEqual(['lease-token'])
+  })
+
+  it('does not crash the loop when a child already closed the failed lease', async () => {
+    const fakeApi = api(claim())
+    fakeApi.failWorkItem = async () => {
+      throw new Error('active lease not found')
+    }
+
+    const result = await runOnce({
+      api: fakeApi,
+      config: config(),
+      executor: executor(0, 'stdout says success', {
+        status: 'blocked',
+        summary: 'Already moved to blocked through another path.'
+      }),
+      logger,
+      stateStore: new MemoryStateStore()
+    })
+
+    expect(result).toEqual({ status: 'failed', workItemId: 'item-1' })
+  })
+
+  it('blocks the item instead of crashing when the child writes an invalid result file', async () => {
+    const fakeApi = api(claim())
+
+    const result = await runOnce({
+      api: fakeApi,
+      config: config(),
+      executor: executor(0, 'stdout says success', {
+        status: 'unknown',
+        summary: 'Not a valid status.'
+      }),
+      logger,
+      stateStore: new MemoryStateStore()
+    })
+
+    expect(result).toEqual({ status: 'failed', workItemId: 'item-1' })
+    expect(fakeApi.completed).toEqual([])
+    expect(fakeApi.failed).toEqual(['lease-token'])
   })
 
   it('blocks the item when the child command fails', async () => {

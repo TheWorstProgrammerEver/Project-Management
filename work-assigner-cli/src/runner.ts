@@ -1,7 +1,10 @@
+import { readFile, rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createTaskEnvironment, createTaskPrompt } from './prompt.js'
 import type {
   ActiveLeaseState,
+  ChildTaskResult,
   LocalStateStore,
   Logger,
   RunOnceResult,
@@ -67,9 +70,11 @@ const runClaimedTask = async ({
   stateStore
 }: RunnerDependencies & { claim: WorkerClaim }): Promise<RunOnceResult> => {
   const startedAt = new Date().toISOString()
+  const resultFilePath = join(config.stateDir, `${claim.workItem.id}-result.json`)
   const state: ActiveLeaseState = {
     leaseExpiresAt: claim.leaseExpiresAt,
     leaseToken: claim.leaseToken,
+    resultFilePath,
     startedAt,
     workItemId: claim.workItem.id,
     workItemTitle: claim.workItem.title,
@@ -77,6 +82,7 @@ const runClaimedTask = async ({
   }
 
   await stateStore.writeActiveLease(state)
+  await rm(resultFilePath, { force: true })
 
   const abortController = new AbortController()
   let heartbeatError: Error | undefined
@@ -92,10 +98,10 @@ const runClaimedTask = async ({
   })
 
   try {
-    const prompt = createTaskPrompt(claim)
+    const prompt = createTaskPrompt(claim, resultFilePath)
     const result = await executor.run({
       claim,
-      environment: createTaskEnvironment(claim),
+      environment: createTaskEnvironment(claim, resultFilePath),
       prompt,
       signal: abortController.signal,
       onChildPid: async (childPid) => {
@@ -107,28 +113,111 @@ const runClaimedTask = async ({
       throw heartbeatError
     }
 
-    if (result.exitCode === 0) {
-      const summary = result.stdoutTail || 'Worker command completed successfully.'
-      await api.completeWorkItem(claim.leaseToken, summary)
+    const childResult = await readChildTaskResult(resultFilePath)
+
+    if (childResult?.status === 'blocked') {
+      await failLease(api, claim.leaseToken, childResult.summary, logger, claim.workItem.id)
+      logger.warn(`Blocked ${claim.workItem.id} from child result file.`)
+      return { status: 'failed', workItemId: claim.workItem.id }
+    }
+
+    if (result.exitCode === 0 && (!childResult || childResult.status === 'completed')) {
+      const summary = childResult?.summary || result.stdoutTail || 'Worker command completed successfully.'
+      await completeLease(api, claim.leaseToken, summary, childResult?.resultUrl, logger, claim.workItem.id)
       logger.info(`Completed ${claim.workItem.id}.`)
       return { status: 'completed', workItemId: claim.workItem.id }
     }
 
     const summary = result.stdoutTail
       || `Worker command exited with code ${result.exitCode}${result.signal ? ` after ${result.signal}` : ''}.`
-    await api.failWorkItem(claim.leaseToken, summary)
+    await failLease(api, claim.leaseToken, summary, logger, claim.workItem.id)
     logger.warn(`Blocked ${claim.workItem.id} after command failure.`)
     return { status: 'failed', workItemId: claim.workItem.id }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Worker command failed.'
-    await api.failWorkItem(claim.leaseToken, message).catch((failError: unknown) => {
-      const failMessage = failError instanceof Error ? failError.message : String(failError)
-      logger.warn(`Could not mark ${claim.workItem.id} as failed: ${failMessage}`)
-    })
-    throw error
+    await failLease(api, claim.leaseToken, message, logger, claim.workItem.id)
+    logger.warn(`Blocked ${claim.workItem.id} after runner error: ${message}`)
+    return { status: 'failed', workItemId: claim.workItem.id }
   } finally {
     heartbeat.stop()
+    await rm(resultFilePath, { force: true })
     await stateStore.clearActiveLease()
+  }
+}
+
+const readChildTaskResult = async (resultFilePath: string): Promise<ChildTaskResult | undefined> => {
+  let text: string
+
+  try {
+    text = await readFile(resultFilePath, 'utf8')
+  } catch (error: unknown) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return undefined
+    }
+
+    throw error
+  }
+
+  const parsed = JSON.parse(text) as unknown
+
+  if (!isChildTaskResult(parsed)) {
+    throw new Error(`Child result file is invalid: ${resultFilePath}`)
+  }
+
+  return parsed
+}
+
+const isChildTaskResult = (value: unknown): value is ChildTaskResult => (
+  typeof value === 'object'
+  && value !== null
+  && 'status' in value
+  && (value.status === 'completed' || value.status === 'blocked')
+  && 'summary' in value
+  && typeof value.summary === 'string'
+  && value.summary.trim().length > 0
+  && (!('resultUrl' in value) || typeof value.resultUrl === 'string')
+)
+
+const isAlreadyClosedLeaseError = (error: unknown) => (
+  error instanceof Error && error.message.includes('active lease not found')
+)
+
+const completeLease = async (
+  api: WorkerApi,
+  leaseToken: string,
+  summary: string,
+  resultUrl: string | undefined,
+  logger: Logger,
+  workItemId: string
+) => {
+  try {
+    await api.completeWorkItem(leaseToken, summary, resultUrl)
+  } catch (error: unknown) {
+    if (isAlreadyClosedLeaseError(error)) {
+      logger.warn(`Lease for ${workItemId} was already closed before completion.`)
+      return
+    }
+
+    throw error
+  }
+}
+
+const failLease = async (
+  api: WorkerApi,
+  leaseToken: string,
+  summary: string,
+  logger: Logger,
+  workItemId: string
+) => {
+  try {
+    await api.failWorkItem(leaseToken, summary)
+  } catch (error: unknown) {
+    if (isAlreadyClosedLeaseError(error)) {
+      logger.warn(`Lease for ${workItemId} was already closed before blocking.`)
+      return
+    }
+
+    throw error
   }
 }
 

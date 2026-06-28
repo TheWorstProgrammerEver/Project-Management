@@ -127,3 +127,5 @@ npm run work-assigner -- --once --backlog-id <backlog-id>
 ```
 
 The CLI reads checked-in local defaults from `work-assigner-cli/.env.defaults`, optional local overrides from `work-assigner-cli/.env.local`, and any explicitly passed `--env-file` values. Use `--loop` for polling mode and `--dry-run` to validate configuration without claiming work.
+
+Claimed child commands receive `WORK_ASSIGNER_RESULT_FILE`. Writing `{"status":"blocked","summary":"..."}` makes the parent runner move the item to `blocked`; writing `{"status":"completed","summary":"...","resultUrl":"..."}` with exit `0` moves it to `review`.

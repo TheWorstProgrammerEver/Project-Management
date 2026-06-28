@@ -38,6 +38,19 @@ The claimed task prompt is piped to stdin. The child process also receives usefu
 - `WORK_ASSIGNER_BACKLOG_ID`
 - `WORK_ASSIGNER_LEASE_TOKEN`
 - `WORK_ASSIGNER_LEASE_EXPIRES_AT`
+- `WORK_ASSIGNER_RESULT_FILE`
+
+The child command should write one JSON object to `WORK_ASSIGNER_RESULT_FILE` before exiting:
+
+```json
+{ "status": "completed", "summary": "Implemented and verified.", "resultUrl": "https://example.com/pr/1" }
+```
+
+or:
+
+```json
+{ "status": "blocked", "summary": "Need a human to provide the missing credential." }
+```
 
 ## Loop
 
@@ -58,8 +71,9 @@ Any value above `1` is rejected.
 
 ## Completion Behavior
 
-- Child exits `0`: the CLI calls `complete_work_item`, which moves the item to `review`.
-- Child exits non-zero: the CLI calls `fail_work_item`, which moves the item to `blocked`.
+- Child writes `{"status":"completed"}` and exits `0`: the CLI calls `complete_work_item`, which moves the item to `review`.
+- Child writes `{"status":"blocked"}`: the CLI calls `fail_work_item`, which moves the item to `blocked`, even if the child exits `0`.
+- Child exits non-zero without a result file: the CLI calls `fail_work_item`, which moves the item to `blocked`.
 - No ready item: the CLI sleeps in loop mode or exits in once mode.
 - Active child command: the CLI heartbeats the lease until the command exits.
 

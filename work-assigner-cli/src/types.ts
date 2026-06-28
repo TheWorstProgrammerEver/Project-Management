@@ -78,6 +78,7 @@ export type ActiveLeaseState = {
   childPid?: number
   leaseExpiresAt: string
   leaseToken: string
+  resultFilePath?: string
   startedAt: string
   workItemId: string
   workItemTitle: string
@@ -113,3 +114,9 @@ export type RunOnceResult =
   | { status: 'idle' }
   | { status: 'completed'; workItemId: string }
   | { status: 'failed'; workItemId: string }
+
+export type ChildTaskResult = {
+  resultUrl?: string
+  status: 'completed' | 'blocked'
+  summary: string
+}
