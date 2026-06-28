@@ -1,6 +1,7 @@
 node_modules
 dist
 work-assigner-cli/dist
+work-assigner-cli/.env.local
 .work-assigner
 playwright-report
 test-results

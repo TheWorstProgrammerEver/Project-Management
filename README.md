@@ -123,7 +123,7 @@ It is intentionally conservative: one process claims at most one task at a time,
 Build/run:
 
 ```sh
-npm run work-assigner -- --once --backlog-id <backlog-id> --worker-secret local-dev-worker-secret
+npm run work-assigner -- --once --backlog-id <backlog-id>
 ```
 
-Use `--loop` for polling mode and `--dry-run` to validate configuration without claiming work.
+The CLI reads checked-in local defaults from `work-assigner-cli/.env.defaults`, optional local overrides from `work-assigner-cli/.env.local`, and any explicitly passed `--env-file` values. Use `--loop` for polling mode and `--dry-run` to validate configuration without claiming work.

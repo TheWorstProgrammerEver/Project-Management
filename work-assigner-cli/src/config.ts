@@ -8,7 +8,6 @@ type ParseConfigInput = {
   env?: NodeJS.ProcessEnv
 }
 
-const defaultWorkerUrl = 'http://127.0.0.1:54321/functions/v1/worker'
 const defaultCommand = 'codex exec -'
 
 const cleanString = (value: string | undefined) => value?.trim() ?? ''
@@ -56,6 +55,7 @@ Options:
   --capabilities <a,b>                Comma-separated worker capabilities.
   --command <shell command>           Command to run for a claimed item. Default: codex exec -
   --dry-run                           Validate config and exit without claiming work.
+  --env-file <path>                   Additional env file loaded after work-assigner-cli/.env.defaults and .env.local.
   --heartbeat-interval-seconds <n>    Lease heartbeat interval. Default: 60.
   --lease-seconds <n>                 Lease duration requested from the API. Default: 1800.
   --loop                              Poll forever.
@@ -65,8 +65,8 @@ Options:
   --state-dir <path>                  Local lock/state directory. Default: .work-assigner.
   --worker-display-name <name>        Human-readable worker name.
   --worker-id <id>                    Stable worker identifier. Default: host name.
-  --worker-secret <secret>            Worker API secret. Local default can use local-dev-worker-secret.
-  --worker-url <url>                  Worker API URL. Default: local Supabase worker function.
+  --worker-secret <secret>            Worker API secret. Prefer env-file or OS env injection.
+  --worker-url <url>                  Worker API URL. Prefer env-file or OS env injection.
   --help                              Show this help.
 
 Environment equivalents:
@@ -99,6 +99,7 @@ export const parseConfig = ({ argv, cwd = process.cwd(), env = process.env }: Pa
       case '--backlog-id':
       case '--capabilities':
       case '--command':
+      case '--env-file':
       case '--heartbeat-interval-seconds':
       case '--lease-seconds':
       case '--max-concurrent-tasks':
@@ -148,6 +149,7 @@ export const parseConfig = ({ argv, cwd = process.cwd(), env = process.env }: Pa
   }
 
   const backlogId = cleanString(flags['--backlog-id']) || cleanString(env.PROJECT_MANAGEMENT_BACKLOG_ID)
+  const workerUrl = cleanString(flags['--worker-url']) || cleanString(env.PROJECT_MANAGEMENT_WORKER_URL)
 
   if (!backlogId && !dryRun) {
     throw new Error('backlogId is required. Use --backlog-id or PROJECT_MANAGEMENT_BACKLOG_ID.')
@@ -158,6 +160,10 @@ export const parseConfig = ({ argv, cwd = process.cwd(), env = process.env }: Pa
 
   if (!workerSecret && !accessToken && !dryRun) {
     throw new Error('Provide --worker-secret, --access-token, PROJECT_MANAGEMENT_WORKER_SECRET, or PROJECT_MANAGEMENT_ACCESS_TOKEN.')
+  }
+
+  if (!workerUrl && !dryRun) {
+    throw new Error('workerUrl is required. Use --worker-url, PROJECT_MANAGEMENT_WORKER_URL, or an env file.')
   }
 
   return {
@@ -187,7 +193,7 @@ export const parseConfig = ({ argv, cwd = process.cwd(), env = process.env }: Pa
       || hostname(),
     workerId: cleanString(flags['--worker-id']) || cleanString(env.WORK_ASSIGNER_WORKER_ID) || hostname(),
     workerSecret,
-    workerUrl: cleanString(flags['--worker-url']) || cleanString(env.PROJECT_MANAGEMENT_WORKER_URL) || defaultWorkerUrl
+    workerUrl
   }
 }
 

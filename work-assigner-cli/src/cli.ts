@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url'
 import { parseConfig, HelpRequested, helpText } from './config.js'
+import { loadCliEnvironment } from './env.js'
 import { ShellTaskExecutor } from './executor.js'
 import { FileLocalStateStore, withLocalLock } from './localState.js'
 import { runLoop, runOnce } from './runner.js'
@@ -17,7 +18,10 @@ export const main = async (argv = process.argv.slice(2)) => {
   let config
 
   try {
-    config = parseConfig({ argv })
+    config = parseConfig({
+      argv,
+      env: await loadCliEnvironment({ argv })
+    })
   } catch (error) {
     if (error instanceof HelpRequested) {
       console.log(helpText)

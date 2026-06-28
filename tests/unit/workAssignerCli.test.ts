@@ -1,5 +1,9 @@
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseConfig } from '../../work-assigner-cli/src/config'
+import { loadCliEnvironment } from '../../work-assigner-cli/src/env'
 import { createTaskPrompt } from '../../work-assigner-cli/src/prompt'
 import { runOnce } from '../../work-assigner-cli/src/runner'
 import type {
@@ -131,6 +135,7 @@ describe('work assigner config', () => {
       argv: ['--backlog-id', 'backlog-1', '--worker-secret', 'secret'],
       cwd: '/repo',
       env: {
+        PROJECT_MANAGEMENT_WORKER_URL: 'http://127.0.0.1:54321/functions/v1/worker',
         WORK_ASSIGNER_CAPABILITIES: 'code,github'
       }
     })
@@ -142,11 +147,59 @@ describe('work assigner config', () => {
     expect(result.workerCapabilities).toEqual(['code', 'github'])
   })
 
+  it('requires a worker URL when not using dry-run mode', () => {
+    expect(() => parseConfig({
+      argv: ['--backlog-id', 'backlog-1', '--worker-secret', 'secret'],
+      env: {}
+    })).toThrow('workerUrl is required')
+  })
+
   it('rejects concurrent task settings above one', () => {
     expect(() => parseConfig({
       argv: ['--dry-run', '--max-concurrent-tasks', '2'],
       env: {}
     })).toThrow('only supports --max-concurrent-tasks 1')
+  })
+
+  it('loads checked-in defaults, local overrides, and explicit env files before parsing', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'work-assigner-config-'))
+    const workAssignerDir = join(cwd, 'work-assigner-cli')
+
+    await mkdir(workAssignerDir, { recursive: true })
+    await writeFile(join(workAssignerDir, '.env.defaults'), [
+      'PROJECT_MANAGEMENT_WORKER_URL=http://127.0.0.1:54321/functions/v1/worker',
+      'PROJECT_MANAGEMENT_WORKER_SECRET=default-secret',
+      'WORK_ASSIGNER_CAPABILITIES=code'
+    ].join('\n'))
+    await writeFile(join(workAssignerDir, '.env.local'), [
+      'PROJECT_MANAGEMENT_WORKER_SECRET=local-secret',
+      'WORK_ASSIGNER_CAPABILITIES=code,github'
+    ].join('\n'))
+    await writeFile(join(cwd, 'custom.env'), [
+      'PROJECT_MANAGEMENT_WORKER_URL=http://192.168.4.49:54321/functions/v1/worker',
+      'WORK_ASSIGNER_CAPABILITIES=code,github,review'
+    ].join('\n'))
+
+    try {
+      const env = await loadCliEnvironment({
+        argv: ['--env-file', 'custom.env'],
+        cwd,
+        env: {
+          PROJECT_MANAGEMENT_WORKER_SECRET: 'process-secret'
+        }
+      })
+      const result = parseConfig({
+        argv: ['--backlog-id', 'backlog-1'],
+        cwd,
+        env
+      })
+
+      expect(result.workerSecret).toBe('process-secret')
+      expect(result.workerUrl).toBe('http://192.168.4.49:54321/functions/v1/worker')
+      expect(result.workerCapabilities).toEqual(['code', 'github', 'review'])
+    } finally {
+      await rm(cwd, { force: true, recursive: true })
+    }
   })
 })
 
