@@ -2,6 +2,7 @@ import { createCommandType, createQueryType } from '../../../lib/dispatch/dispat
 import { appRequestIdentifiers } from '../../../common/appRequestIdentifiers'
 import type {
   BacklogState,
+  LoadBacklogParams,
   WorkItem,
   WorkItemInput,
   WorkItemStatus
@@ -17,7 +18,7 @@ export type UpdateWorkItemStatusParams = {
   status: WorkItemStatus
 }
 
-export const LoadBacklogQuery = createQueryType(appRequestIdentifiers.loadBacklog)<BacklogState>()
+export const LoadBacklogQuery = createQueryType(appRequestIdentifiers.loadBacklog)<BacklogState, LoadBacklogParams>()
 export const CreateWorkItemCommand = createCommandType(appRequestIdentifiers.createWorkItem)<WorkItem, WorkItemInput>()
 export const UpdateWorkItemCommand = createCommandType(appRequestIdentifiers.updateWorkItem)<WorkItem, UpdateWorkItemParams>()
 export const UpdateWorkItemStatusCommand = createCommandType(appRequestIdentifiers.updateWorkItemStatus)<WorkItem, UpdateWorkItemStatusParams>()

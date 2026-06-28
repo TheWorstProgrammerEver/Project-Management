@@ -17,6 +17,7 @@ import styles from './BacklogScreen.module.scss'
 const defaultInput: WorkItemInput = {
   acceptanceCriteria: [],
   assignee: 'Daedalus',
+  backlogId: '',
   description: '',
   labels: [],
   priorityRank: 1000,
@@ -43,13 +44,14 @@ const joinLines = (value: string[]) => value.join('\n')
 const joinLabels = (value: string[]) => value.join(', ')
 
 type WorkItemFormProps = {
+  backlogId: string
   busy: boolean
   item?: WorkItem
   onCancel: () => void
   onSave: (input: WorkItemInput) => Promise<void>
 }
 
-const WorkItemForm = ({ busy, item, onCancel, onSave }: WorkItemFormProps) => {
+const WorkItemForm = ({ backlogId, busy, item, onCancel, onSave }: WorkItemFormProps) => {
   const [title, setTitle] = useState(item?.title ?? defaultInput.title)
   const [description, setDescription] = useState(item?.description ?? defaultInput.description)
   const [repository, setRepository] = useState(item?.repository ?? defaultInput.repository)
@@ -65,6 +67,7 @@ const WorkItemForm = ({ busy, item, onCancel, onSave }: WorkItemFormProps) => {
     await onSave({
       acceptanceCriteria: splitLines(acceptanceCriteria),
       assignee: assignee.trim(),
+      backlogId: item?.backlogId ?? backlogId,
       description: description.trim(),
       labels: splitLabels(labels),
       priorityRank: Number.parseInt(priorityRank, 10) || defaultInput.priorityRank,
@@ -256,6 +259,10 @@ export const BacklogScreen = () => {
     createWorkItem,
     readyItems,
     reload,
+    selectBacklog,
+    selectTeam,
+    selectedBacklog,
+    selectedTeam,
     state,
     updateWorkItem,
     updateWorkItemStatus
@@ -264,6 +271,9 @@ export const BacklogScreen = () => {
   const [selectedItemId, setSelectedItemId] = useState<string>()
   const groupedItems = useMemo(() => workItemsByStatus(state.workItems), [state.workItems])
   const selectedItem = state.workItems.find((item) => item.id === selectedItemId) ?? state.workItems[0]
+  const teamBacklogs = useMemo(() => (
+    state.backlogs.filter((backlog) => backlog.teamId === state.selectedTeamId)
+  ), [state.backlogs, state.selectedTeamId])
 
   const saveWorkItem = async (input: WorkItemInput) => {
     if (editingItem && editingItem !== 'new') {
@@ -283,7 +293,8 @@ export const BacklogScreen = () => {
         header={(
           <header className={styles.title}>
             <p>{`${readyItems.length} ready, ${activeLeases.length} leased, ${state.workItems.length} total`}</p>
-            <h2 id="backlog-title">Agent backlog</h2>
+            <h2 id="backlog-title">{selectedBacklog?.name ?? 'Agent backlog'}</h2>
+            {selectedTeam && <span>{selectedTeam.name}</span>}
           </header>
         )}
         actions={(
@@ -295,7 +306,7 @@ export const BacklogScreen = () => {
               </Button>
             </ComponentRoleContext>
             <ComponentRoleContext role="primary">
-              <Button type="button" onClick={() => setEditingItem('new')}>
+              <Button type="button" disabled={!selectedBacklog} onClick={() => setEditingItem('new')}>
                 <Plus aria-hidden="true" />
                 New task
               </Button>
@@ -305,6 +316,40 @@ export const BacklogScreen = () => {
       />
 
       <LoaderContainer loader={backlogLoad}>
+        <div className={styles.scopeBar} aria-label="Backlog scope">
+          <label>
+            <span>Team</span>
+            <select
+              value={state.selectedTeamId ?? ''}
+              onChange={(event) => {
+                setEditingItem(undefined)
+                setSelectedItemId(undefined)
+                void selectTeam(event.target.value)
+              }}
+            >
+              {state.teams.map((team) => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>Backlog</span>
+            <select
+              value={state.selectedBacklogId ?? ''}
+              onChange={(event) => {
+                setEditingItem(undefined)
+                setSelectedItemId(undefined)
+                void selectBacklog(event.target.value)
+              }}
+            >
+              {teamBacklogs.map((backlog) => (
+                <option key={backlog.id} value={backlog.id}>{backlog.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         <div className={styles.layout}>
           <div className={styles.board} aria-label="Backlog board">
             {groupedItems.map((group) => (
@@ -339,6 +384,7 @@ export const BacklogScreen = () => {
             {editingItem ? (
               <Section title={editingItem === 'new' ? 'New task' : 'Edit task'}>
                 <WorkItemForm
+                  backlogId={selectedBacklog?.id ?? ''}
                   busy={backlogLoad.busy}
                   item={editingItem === 'new' ? undefined : editingItem}
                   onCancel={() => setEditingItem(undefined)}

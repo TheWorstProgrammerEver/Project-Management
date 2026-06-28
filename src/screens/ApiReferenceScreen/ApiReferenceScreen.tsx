@@ -4,7 +4,7 @@ import styles from './ApiReferenceScreen.module.scss'
 const workerActions = [
   {
     action: 'claim_next_work_item',
-    fields: 'workerId, workerDisplayName, workerCapabilities, leaseSeconds',
+    fields: 'backlogId, workerId, workerDisplayName, workerCapabilities, leaseSeconds',
     result: 'Returns a leaseToken and the claimed work item, or null when no ready item exists.'
   },
   {
@@ -39,13 +39,13 @@ export const ApiReferenceScreen = () => (
     <Section title="Endpoint">
       <div className={styles.endpoint}>
         <code>POST /functions/v1/worker</code>
-        <p>Include <code>x-worker-secret</code>. Local development defaults to <code>local-dev-worker-secret</code>.</p>
+        <p>Use a Supabase bearer token for a team member, or the local development <code>x-worker-secret</code> fallback.</p>
       </div>
     </Section>
 
     <Section title="Duplicate prevention">
       <p className={styles.copy}>
-        Workers never choose tasks directly. They call the claim action, and Postgres selects exactly one ready item inside a transaction using row locking and an active lease constraint. Every mutating worker action requires the lease token.
+        Workers never choose tasks directly. They call the claim action for a specific backlog, and Postgres selects exactly one ready item inside a transaction using row locking and an active lease constraint. Team membership is enforced for bearer-authenticated workers. Every mutating worker action requires the lease token.
       </p>
     </Section>
 
@@ -75,6 +75,7 @@ export const ApiReferenceScreen = () => (
   -H 'x-worker-secret: local-dev-worker-secret' \\
   -d '{
     "action": "claim_next_work_item",
+    "backlogId": "backlog-uuid",
     "workerId": "daedalus",
     "workerDisplayName": "Daedalus",
     "workerCapabilities": ["code", "github"],

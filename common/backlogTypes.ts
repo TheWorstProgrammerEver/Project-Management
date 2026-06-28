@@ -11,6 +11,7 @@ export type WorkItemStatus =
 
 export type WorkItem = {
   id: string
+  backlogId: string
   title: string
   description: string
   repository: string
@@ -42,12 +43,31 @@ export type RunEvent = {
   createdAt: string
 }
 
+export type Team = {
+  id: string
+  name: string
+  slug: string
+}
+
+export type Backlog = {
+  id: string
+  teamId: string
+  name: string
+  slug: string
+  description: string
+}
+
 export type BacklogState = {
+  backlogs: Backlog[]
   workItems: WorkItem[]
   recentEvents: RunEvent[]
+  selectedBacklogId?: string
+  selectedTeamId?: string
+  teams: Team[]
 }
 
 export type WorkItemInput = {
+  backlogId: string
   title: string
   description: string
   repository: string
@@ -56,6 +76,11 @@ export type WorkItemInput = {
   status: WorkItemStatus
   priorityRank: number
   assignee: string
+}
+
+export type LoadBacklogParams = {
+  backlogId?: string
+  teamId?: string
 }
 
 export type WorkerClaim = {

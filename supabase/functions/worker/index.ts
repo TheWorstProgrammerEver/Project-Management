@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@^2'
 
 type WorkerRequest = {
   action?: string
+  backlogId?: string
   workerId?: string
   workerDisplayName?: string
   workerCapabilities?: string[]
@@ -23,6 +24,18 @@ const response = (body: unknown, status = 200) => (
   Response.json(body, { status, headers: corsHeaders })
 )
 
+const errorMessage = (error: unknown) => {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (typeof error === 'object' && error && 'message' in error && typeof error.message === 'string') {
+    return error.message
+  }
+
+  return 'Worker request failed.'
+}
+
 const requiredString = (value: unknown, label: string) => {
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${label} is required.`)
@@ -31,12 +44,22 @@ const requiredString = (value: unknown, label: string) => {
   return value.trim()
 }
 
-const getServiceClient = () => {
+const getUrl = () => {
   const url = Deno.env.get('SUPABASE_URL')
+
+  if (!url) {
+    throw new Error('Worker function needs SUPABASE_URL.')
+  }
+
+  return url
+}
+
+const getServiceClient = () => {
+  const url = getUrl()
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-  if (!url || !serviceRoleKey) {
-    throw new Error('Worker function needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.')
+  if (!serviceRoleKey) {
+    throw new Error('Worker function needs SUPABASE_SERVICE_ROLE_KEY.')
   }
 
   return createClient(url, serviceRoleKey, {
@@ -47,20 +70,47 @@ const getServiceClient = () => {
   })
 }
 
-const assertWorkerSecret = (request: Request) => {
-  const expected = Deno.env.get('WORKER_API_SECRET') ?? 'local-dev-worker-secret'
-  const actual = request.headers.get('x-worker-secret')
+const getUserClient = (authorization: string) => {
+  const publishableKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY')
 
-  if (!actual || actual !== expected) {
-    throw new Error('Worker secret is invalid.')
+  if (!publishableKey) {
+    throw new Error('Worker function needs SUPABASE_ANON_KEY or SUPABASE_PUBLISHABLE_KEY for bearer auth.')
   }
+
+  return createClient(getUrl(), publishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    },
+    global: {
+      headers: {
+        Authorization: authorization
+      }
+    }
+  })
 }
 
-const callRpc = async (name: string, params: Record<string, unknown>) => {
-  const { data, error } = await getServiceClient().rpc(name, params)
+const getRpcClient = (request: Request) => {
+  const expected = Deno.env.get('WORKER_API_SECRET') ?? 'local-dev-worker-secret'
+  const actual = request.headers.get('x-worker-secret')
+  const authorization = request.headers.get('authorization')
+
+  if (actual && actual === expected) {
+    return getServiceClient()
+  }
+
+  if (authorization?.toLowerCase().startsWith('bearer ')) {
+    return getUserClient(authorization)
+  }
+
+  throw new Error('Worker secret is invalid or bearer authorization is missing.')
+}
+
+const callRpc = async (client: ReturnType<typeof createClient>, name: string, params: Record<string, unknown>) => {
+  const { data, error } = await client.rpc(name, params)
 
   if (error) {
-    throw error
+    throw new Error(error.message)
   }
 
   return data
@@ -76,36 +126,37 @@ Deno.serve(async (request) => {
   }
 
   try {
-    assertWorkerSecret(request)
+    const client = getRpcClient(request)
 
     const body = await request.json() as WorkerRequest
 
     switch (body.action) {
       case 'claim_next_work_item':
-        return response(await callRpc('claim_next_work_item', {
+        return response(await callRpc(client, 'claim_next_work_item', {
           worker_id: requiredString(body.workerId, 'workerId'),
           worker_display_name: body.workerDisplayName ?? body.workerId,
           worker_capabilities: Array.isArray(body.workerCapabilities) ? body.workerCapabilities : [],
-          lease_seconds: body.leaseSeconds ?? 1800
+          lease_seconds: body.leaseSeconds ?? 1800,
+          target_backlog_id: requiredString(body.backlogId, 'backlogId')
         }))
       case 'heartbeat_lease':
-        return response(await callRpc('heartbeat_work_lease', {
+        return response(await callRpc(client, 'heartbeat_work_lease', {
           target_lease_token: requiredString(body.leaseToken, 'leaseToken'),
           lease_seconds: body.leaseSeconds ?? 1800
         }))
       case 'release_lease':
-        return response(await callRpc('release_work_lease', {
+        return response(await callRpc(client, 'release_work_lease', {
           target_lease_token: requiredString(body.leaseToken, 'leaseToken'),
           reason: body.reason ?? ''
         }))
       case 'complete_work_item':
-        return response(await callRpc('complete_work_lease', {
+        return response(await callRpc(client, 'complete_work_lease', {
           target_lease_token: requiredString(body.leaseToken, 'leaseToken'),
           result_summary: body.resultSummary ?? '',
           result_url: body.resultUrl ?? ''
         }))
       case 'fail_work_item':
-        return response(await callRpc('fail_work_lease', {
+        return response(await callRpc(client, 'fail_work_lease', {
           target_lease_token: requiredString(body.leaseToken, 'leaseToken'),
           error_summary: body.errorSummary ?? ''
         }))
@@ -113,8 +164,6 @@ Deno.serve(async (request) => {
         return response({ error: 'Unsupported worker action.' }, 400)
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Worker request failed.'
-
-    return response({ error: message }, 400)
+    return response({ error: errorMessage(error) }, 400)
   }
 })

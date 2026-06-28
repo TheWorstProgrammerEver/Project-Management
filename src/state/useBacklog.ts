@@ -3,6 +3,7 @@ import type { IRequest } from '../../lib/dispatch/dispatch'
 import { useLoader } from '../../lib/hooks/useLoader'
 import type {
   BacklogState,
+  LoadBacklogParams,
   WorkItem,
   WorkItemInput,
   WorkItemStatus
@@ -29,9 +30,9 @@ export const useBacklog = (currentAccount?: Account) => {
     busy: Boolean(currentAccount) && (!backlogLoad.settled || backlogLoad.busy)
   }), [backlogLoad, currentAccount])
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (params?: LoadBacklogParams) => {
     try {
-      const nextState = await backlogLoad.execute(() => appDispatcher.dispatch(new LoadBacklogQuery()))
+      const nextState = await backlogLoad.execute(() => appDispatcher.dispatch(new LoadBacklogQuery(params ?? {})))
       setState(nextState)
 
       return nextState
@@ -63,8 +64,11 @@ export const useBacklog = (currentAccount?: Account) => {
   }, [])
 
   const createWorkItem = useCallback((input: WorkItemInput) => (
-    runAction(new CreateWorkItemCommand(input), withSavedWorkItem)
-  ), [runAction])
+    runAction(new CreateWorkItemCommand({
+      ...input,
+      backlogId: input.backlogId || state.selectedBacklogId || ''
+    }), withSavedWorkItem)
+  ), [runAction, state.selectedBacklogId])
 
   const updateWorkItem = useCallback((id: string, input: WorkItemInput) => (
     runAction(new UpdateWorkItemCommand({ id, input }), withSavedWorkItem)
@@ -84,6 +88,24 @@ export const useBacklog = (currentAccount?: Account) => {
     [state.workItems]
   )
 
+  const selectedTeam = useMemo(
+    () => state.teams.find((team) => team.id === state.selectedTeamId),
+    [state.selectedTeamId, state.teams]
+  )
+
+  const selectedBacklog = useMemo(
+    () => state.backlogs.find((backlog) => backlog.id === state.selectedBacklogId),
+    [state.backlogs, state.selectedBacklogId]
+  )
+
+  const selectTeam = useCallback((teamId: string) => (
+    reload({ teamId })
+  ), [reload])
+
+  const selectBacklog = useCallback((backlogId: string) => (
+    reload({ backlogId })
+  ), [reload])
+
   return {
     activeLeases,
     backlogLoad: backlogLoadState,
@@ -91,6 +113,10 @@ export const useBacklog = (currentAccount?: Account) => {
     currentAccount,
     readyItems,
     reload,
+    selectBacklog,
+    selectTeam,
+    selectedBacklog,
+    selectedTeam,
     state,
     updateWorkItem,
     updateWorkItemStatus

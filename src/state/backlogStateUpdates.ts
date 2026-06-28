@@ -2,7 +2,9 @@ import type { BacklogState, WorkItem } from '../../common/backlogTypes'
 import { sortedWorkItems } from '../domain/backlog/status'
 
 export const emptyBacklogState: BacklogState = {
+  backlogs: [],
   recentEvents: [],
+  teams: [],
   workItems: []
 }
 

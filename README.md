@@ -2,7 +2,9 @@
 
 Project Management is a Supabase-backed, API-first backlog for Codex-managed work.
 
-The core product is the worker claim contract: agents do not pick tasks from a list directly. They call the worker API, and Postgres grants exactly one active lease for one ready work item.
+The core product is the worker claim contract: agents do not pick tasks from a list directly. They call the worker API for a backlog, and Postgres grants exactly one active lease for one ready work item.
+
+Access is team-scoped. Humans and agents are members of teams, teams own one or more backlogs, and row-level security prevents members from seeing backlogs or tasks outside their teams.
 
 ## Get Going
 
@@ -32,13 +34,24 @@ POST http://127.0.0.1:54321/functions/v1/worker
 Include:
 
 ```text
-x-worker-secret: local-dev-worker-secret
 content-type: application/json
+```
+
+For authenticated workers, include a Supabase bearer token for a user that belongs to the team:
+
+```text
+authorization: Bearer <supabase-session-access-token>
+```
+
+Local development also supports the fallback worker secret:
+
+```text
+x-worker-secret: local-dev-worker-secret
 ```
 
 Actions:
 
-- `claim_next_work_item`: `workerId`, `workerDisplayName`, `workerCapabilities`, `leaseSeconds`
+- `claim_next_work_item`: `backlogId`, `workerId`, `workerDisplayName`, `workerCapabilities`, `leaseSeconds`
 - `heartbeat_lease`: `leaseToken`, `leaseSeconds`
 - `release_lease`: `leaseToken`, `reason`
 - `complete_work_item`: `leaseToken`, `resultSummary`, `resultUrl`
@@ -52,6 +65,7 @@ curl -s http://127.0.0.1:54321/functions/v1/worker \
   -H 'x-worker-secret: local-dev-worker-secret' \
   -d '{
     "action": "claim_next_work_item",
+    "backlogId": "backlog-uuid",
     "workerId": "daedalus",
     "workerDisplayName": "Daedalus",
     "workerCapabilities": ["code", "github"],
@@ -63,6 +77,7 @@ curl -s http://127.0.0.1:54321/functions/v1/worker \
 
 The authenticated UI is an operator console:
 
+- team and backlog selection
 - backlog board grouped by status
 - task creation and status updates
 - task detail with acceptance criteria, active lease, result links, and recent worker events
@@ -95,4 +110,4 @@ npm run test:security
 npm run all-done
 ```
 
-The security suite follows the Friendly Ledger pattern: it verifies anonymous users cannot call app functions or read/mutate app tables directly, the worker function requires its secret, and concurrent worker claims cannot lease the same ready item twice.
+The security suite follows the Friendly Ledger pattern: it verifies anonymous users cannot call app functions or read/mutate app tables directly, team non-members cannot see or mutate another team's backlog, worker claims are backlog-scoped, and concurrent worker claims cannot lease the same ready item twice.

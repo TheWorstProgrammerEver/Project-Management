@@ -5,6 +5,7 @@ import { sortedWorkItems, workItemsByStatus } from '../../src/domain/backlog/sta
 const item = (id: string, status: WorkItem['status'], priorityRank: number, createdAt: string): WorkItem => ({
   acceptanceCriteria: [],
   assignee: '',
+  backlogId: 'backlog-1',
   createdAt,
   description: '',
   id,
