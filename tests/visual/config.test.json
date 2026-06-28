@@ -1,0 +1,16 @@
+{
+  "appName": "Project Management",
+  "buildVersion": "test",
+  "environment": "test",
+  "auth": {
+    "supportedTypes": {
+      "emailPassword": true,
+      "otp": true,
+      "magicLink": true
+    }
+  },
+  "supabase": {
+    "url": "http://127.0.0.1:54321",
+    "publishableKey": "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH"
+  }
+}

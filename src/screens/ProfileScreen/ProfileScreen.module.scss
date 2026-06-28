@@ -1,0 +1,40 @@
+.screen {
+  display: grid;
+  gap: 1rem;
+
+  h2 {
+    margin: 0;
+    font-size: clamp(1.8rem, 4vw, 2.4rem);
+    line-height: 1;
+  }
+
+  dl {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  div {
+    display: grid;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.75rem;
+  }
+
+  dt {
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+  }
+
+  button {
+    justify-self: start;
+  }
+}

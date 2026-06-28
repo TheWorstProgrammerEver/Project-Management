@@ -1,0 +1,16 @@
+{
+  "appName": "Project Management",
+  "buildVersion": "#{BUILD_VERSION}#",
+  "environment": "#{ENVIRONMENT}#",
+  "auth": {
+    "supportedTypes": {
+      "emailPassword": #{AUTH_EMAIL_PASSWORD_ENABLED}#,
+      "otp": #{AUTH_OTP_ENABLED}#,
+      "magicLink": #{AUTH_MAGIC_LINK_ENABLED}#
+    }
+  },
+  "supabase": {
+    "url": "#{SUPABASE_URL}#",
+    "publishableKey": "#{SUPABASE_PUBLISHABLE_KEY}#"
+  }
+}

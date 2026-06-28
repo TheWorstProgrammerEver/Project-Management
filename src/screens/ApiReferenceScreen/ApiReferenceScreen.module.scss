@@ -1,0 +1,85 @@
+.screen {
+  display: grid;
+  gap: 1rem;
+  max-width: 70rem;
+}
+
+.header {
+  display: grid;
+  gap: 0.3rem;
+
+  h2,
+  p {
+    margin: 0;
+  }
+
+  h2 {
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    line-height: 1.05;
+  }
+
+  p {
+    color: var(--color-muted);
+    font-size: 0.84rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+}
+
+.endpoint,
+.copy {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+
+  article {
+    display: grid;
+    gap: 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.8rem;
+  }
+
+  h3,
+  dl,
+  dd {
+    margin: 0;
+  }
+
+  h3 {
+    overflow-wrap: anywhere;
+    font-size: 0.95rem;
+  }
+
+  dl {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  dt {
+    color: var(--color-muted);
+    font-size: 0.74rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  dd {
+    overflow-wrap: anywhere;
+  }
+}
+
+.code {
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  margin: 0;
+  padding: 0.8rem;
+  background: var(--color-background);
+  color: var(--color-text);
+}
