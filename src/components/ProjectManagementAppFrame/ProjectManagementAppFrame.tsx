@@ -1,9 +1,11 @@
-import { BookOpenText, CircleUserRound, ClipboardList } from 'lucide-react'
+import { BookOpenText, CircleUserRound, UsersRound } from 'lucide-react'
+import { useMemo } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { AppFrame } from '../../../lib/ui/AppFrame/AppFrame'
 import { ComponentRoleContext } from '../../../lib/ui/ComponentRoleContext/ComponentRoleContext'
 import { ResponsiveActionLink } from '../../../lib/ui/ResponsiveActionLink/ResponsiveActionLink'
 import { useAuthContext } from '../../contexts/AuthContext'
+import { useBacklogContext } from '../../contexts/BacklogContext'
 import styles from './ProjectManagementAppFrame.module.scss'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) => (
@@ -12,7 +14,16 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) => (
 
 export const ProjectManagementAppFrame = () => {
   const { currentAccount } = useAuthContext()
+  const { state } = useBacklogContext()
   const accountEmail = currentAccount?.email ?? 'Profile'
+  const memberTeamIds = useMemo(
+    () => new Set(state.teamMembers.map((member) => member.teamId)),
+    [state.teamMembers]
+  )
+  const memberTeams = useMemo(
+    () => state.teams.filter((team) => memberTeamIds.has(team.id)),
+    [memberTeamIds, state.teams]
+  )
 
   return (
     <AppFrame
@@ -32,10 +43,23 @@ export const ProjectManagementAppFrame = () => {
       )}
       navigation={(
         <nav className={styles.nav} aria-label="App navigation">
-          <NavLink className={navLinkClass} to="/" end>
-            <ClipboardList aria-hidden="true" />
-            Backlog
-          </NavLink>
+          <div className={styles.navSection}>
+            <NavLink className={navLinkClass} to="/" end>
+              <UsersRound aria-hidden="true" />
+              Teams
+            </NavLink>
+
+            {memberTeams.length > 0 && (
+              <div className={styles.teamLinks} aria-label="Teams">
+                {memberTeams.map((team) => (
+                  <NavLink key={team.id} className={navLinkClass} to={`/teams/${team.id}`}>
+                    {team.name}
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </div>
+
           <NavLink className={navLinkClass} to="/api">
             <BookOpenText aria-hidden="true" />
             API

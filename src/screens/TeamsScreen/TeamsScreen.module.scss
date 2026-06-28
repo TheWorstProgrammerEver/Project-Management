@@ -1,0 +1,31 @@
+.screen {
+  display: grid;
+  gap: 1rem;
+}
+
+.header {
+  display: grid;
+  gap: 0.3rem;
+
+  h2,
+  p {
+    margin: 0;
+  }
+
+  h2 {
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    line-height: 1.05;
+  }
+
+  p {
+    color: var(--color-muted);
+    font-size: 0.84rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-muted);
+}

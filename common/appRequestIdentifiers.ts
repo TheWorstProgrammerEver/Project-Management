@@ -1,6 +1,9 @@
 export const appRequestIdentifiers = {
   createWorkItem: 'backlog.create-work-item',
+  acceptTeamInvitation: 'teams.accept-invitation',
+  inviteTeamMember: 'teams.invite-member',
   loadBacklog: 'backlog.load',
+  rejectTeamInvitation: 'teams.reject-invitation',
   updateWorkItem: 'backlog.update-work-item',
   updateWorkItemStatus: 'backlog.update-work-item-status'
 } as const

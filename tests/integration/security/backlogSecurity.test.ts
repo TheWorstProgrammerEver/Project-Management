@@ -310,31 +310,50 @@ describe('backlog security integration', () => {
     expect(updateError).toBeTruthy()
   })
 
-  test('pending team invitations become memberships on app load', async () => {
-    const { error: inviteError } = await createAdminClient()
-      .from('team_invitations')
-      .insert({
-        email: inviteeEmail,
-        role: 'member',
-        team_id: teamId
-      })
+  test('team members can invite people and invitees accept explicitly', async () => {
+    const { error: inviteError } = await memberClient.functions.invoke('app', {
+      body: {
+        identifier: appRequestIdentifiers.inviteTeamMember,
+        params: {
+          email: inviteeEmail,
+          teamId
+        }
+      }
+    })
 
     expect(inviteError).toBeFalsy()
 
-    const { data, error } = await inviteeClient.functions.invoke('app', {
+    const { data: pendingData, error: pendingError } = await inviteeClient.functions.invoke('app', {
       body: {
         identifier: appRequestIdentifiers.loadBacklog,
         params: {}
       }
     })
 
-    expect(error).toBeFalsy()
-    expect(data.teams).toEqual(expect.arrayContaining([
+    expect(pendingError).toBeFalsy()
+    expect(pendingData.teams).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: teamId })
     ]))
+    expect(pendingData.backlogs).toEqual([])
+    expect(pendingData.pendingInvitations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ email: inviteeEmail, teamId })
+    ]))
+
+    const invitationId = pendingData.pendingInvitations[0].id
+    const { data, error } = await inviteeClient.functions.invoke('app', {
+      body: {
+        identifier: appRequestIdentifiers.acceptTeamInvitation,
+        params: {
+          invitationId
+        }
+      }
+    })
+
+    expect(error).toBeFalsy()
     expect(data.backlogs).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: backlogId })
     ]))
+    expect(data.pendingInvitations).toHaveLength(0)
 
     const { data: memberships } = await createAdminClient()
       .from('team_memberships')

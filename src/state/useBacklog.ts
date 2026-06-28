@@ -3,6 +3,7 @@ import type { IRequest } from '../../lib/dispatch/dispatch'
 import { useLoader } from '../../lib/hooks/useLoader'
 import type {
   BacklogState,
+  InviteTeamMemberParams,
   LoadBacklogParams,
   WorkItem,
   WorkItemInput,
@@ -10,8 +11,11 @@ import type {
 } from '../../common/backlogTypes'
 import { appDispatcher } from '../data/app/appDispatcher'
 import {
+  AcceptTeamInvitationCommand,
   CreateWorkItemCommand,
+  InviteTeamMemberCommand,
   LoadBacklogQuery,
+  RejectTeamInvitationCommand,
   UpdateWorkItemCommand,
   UpdateWorkItemStatusCommand
 } from '../data/app/requests'
@@ -25,6 +29,8 @@ const errorMessage = (error: unknown) => (
 export const useBacklog = (currentAccount?: Account) => {
   const [state, setState] = useState<BacklogState>(emptyBacklogState)
   const backlogLoad = useLoader({ getErrorMessage: errorMessage })
+  const invitationActionLoad = useLoader({ getErrorMessage: errorMessage })
+  const inviteMemberLoad = useLoader({ getErrorMessage: errorMessage })
   const backlogLoadState = useMemo(() => ({
     ...backlogLoad,
     busy: Boolean(currentAccount) && (!backlogLoad.settled || backlogLoad.busy)
@@ -78,6 +84,36 @@ export const useBacklog = (currentAccount?: Account) => {
     runAction(new UpdateWorkItemStatusCommand({ id, status }), withSavedWorkItem)
   ), [runAction])
 
+  const inviteTeamMember = useCallback(async (params: InviteTeamMemberParams) => {
+    const nextState = await inviteMemberLoad.execute(() => (
+      appDispatcher.dispatch(new InviteTeamMemberCommand(params))
+    ))
+
+    setState(nextState)
+
+    return nextState
+  }, [inviteMemberLoad])
+
+  const acceptTeamInvitation = useCallback(async (invitationId: string) => {
+    const nextState = await invitationActionLoad.execute(() => (
+      appDispatcher.dispatch(new AcceptTeamInvitationCommand({ invitationId }))
+    ))
+
+    setState(nextState)
+
+    return nextState
+  }, [invitationActionLoad])
+
+  const rejectTeamInvitation = useCallback(async (invitationId: string) => {
+    const nextState = await invitationActionLoad.execute(() => (
+      appDispatcher.dispatch(new RejectTeamInvitationCommand({ invitationId }))
+    ))
+
+    setState(nextState)
+
+    return nextState
+  }, [invitationActionLoad])
+
   const readyItems = useMemo(
     () => state.workItems.filter((item) => item.status === 'ready'),
     [state.workItems]
@@ -108,10 +144,15 @@ export const useBacklog = (currentAccount?: Account) => {
 
   return {
     activeLeases,
+    acceptTeamInvitation,
     backlogLoad: backlogLoadState,
     createWorkItem,
     currentAccount,
+    invitationActionLoad,
+    inviteMemberLoad,
+    inviteTeamMember,
     readyItems,
+    rejectTeamInvitation,
     reload,
     selectBacklog,
     selectTeam,

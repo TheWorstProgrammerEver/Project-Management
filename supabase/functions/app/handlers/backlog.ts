@@ -1,8 +1,22 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@^2'
-import type { LoadBacklogParams, WorkItemInput, WorkItemStatus } from '../../../../common/backlogTypes.ts'
+import type {
+  InviteTeamMemberParams,
+  LoadBacklogParams,
+  TeamInvitationActionParams,
+  WorkItemInput,
+  WorkItemStatus
+} from '../../../../common/backlogTypes.ts'
 import { appRequestIdentifiers } from '../../../../common/appRequestIdentifiers.ts'
 import { cleanPositiveInteger, cleanString, cleanStringArray, HttpError } from '../helpers.ts'
-import { mapActiveLease, mapBacklog, mapRunEvent, mapTeam, mapWorkItem } from '../mappers.ts'
+import {
+  mapActiveLease,
+  mapBacklog,
+  mapRunEvent,
+  mapTeam,
+  mapTeamInvitation,
+  mapTeamMember,
+  mapWorkItem
+} from '../mappers.ts'
 import { createAppRequestHandlerFactory } from './handlerFactory.ts'
 
 const statusValues = new Set<WorkItemStatus>([
@@ -71,20 +85,37 @@ const normalizeLoadParams = (value: unknown): LoadBacklogParams => {
   }
 }
 
-const loadBacklog = async (client: SupabaseClient, params: LoadBacklogParams = {}) => {
-  const { error: inviteError } = await client.rpc('accept_pending_team_invitations')
+const normalizeInviteParams = (value: unknown): InviteTeamMemberParams => {
+  const source = typeof value === 'object' && value ? value as Record<string, unknown> : {}
+  const teamId = cleanString(source.teamId)
+  const email = cleanString(source.email).toLowerCase()
 
-  if (inviteError) {
-    throw inviteError
+  if (!teamId || !email) {
+    throw new HttpError(400, 'Team id and email are required.')
   }
 
+  return { teamId, email }
+}
+
+const normalizeInvitationActionParams = (value: unknown): TeamInvitationActionParams => {
+  const source = typeof value === 'object' && value ? value as Record<string, unknown> : {}
+  const invitationId = cleanString(source.invitationId)
+
+  if (!invitationId) {
+    throw new HttpError(400, 'Invitation id is required.')
+  }
+
+  return { invitationId }
+}
+
+const loadBacklog = async (client: SupabaseClient, params: LoadBacklogParams = {}) => {
   const { error: expiryError } = await client.rpc('expire_stale_work_leases')
 
   if (expiryError) {
     throw expiryError
   }
 
-  const [teamsResult, backlogsResult] = await Promise.all([
+  const [teamsResult, backlogsResult, membershipsResult, invitationsResult] = await Promise.all([
     client
       .from('teams')
       .select('id, name, slug')
@@ -92,7 +123,15 @@ const loadBacklog = async (client: SupabaseClient, params: LoadBacklogParams = {
     client
       .from('backlogs')
       .select('id, team_id, name, slug, description')
-      .order('name', { ascending: true })
+      .order('name', { ascending: true }),
+    client
+      .from('team_memberships')
+      .select('id, team_id, user_id, role, member_kind, display_name, created_at')
+      .order('created_at', { ascending: true }),
+    client
+      .from('team_invitations')
+      .select('id, team_id, email, role, accepted_at, created_at')
+      .order('created_at', { ascending: true })
   ])
 
   if (teamsResult.error) {
@@ -103,22 +142,40 @@ const loadBacklog = async (client: SupabaseClient, params: LoadBacklogParams = {
     throw backlogsResult.error
   }
 
+  if (membershipsResult.error) {
+    throw membershipsResult.error
+  }
+
+  if (invitationsResult.error) {
+    throw invitationsResult.error
+  }
+
   const teams = teamsResult.data.map(mapTeam)
   const backlogs = backlogsResult.data.map(mapBacklog)
+  const teamMembers = membershipsResult.data.map(mapTeamMember)
+  const teamInvitations = invitationsResult.data.map(mapTeamInvitation)
+  const memberTeamIds = new Set(teamMembers.map((member) => member.teamId))
+  const memberTeams = teams.filter((team) => memberTeamIds.has(team.id))
+  const currentUserEmail = (await client.auth.getUser()).data.user?.email?.toLowerCase()
+  const pendingInvitations = teamInvitations.filter((invitation) => (
+    !invitation.acceptedAt && invitation.email.toLowerCase() === currentUserEmail
+  ))
   const requestedBacklog = backlogs.find((backlog) => backlog.id === params.backlogId)
   const selectedTeamId = requestedBacklog?.teamId
-    ?? teams.find((team) => team.id === params.teamId)?.id
-    ?? teams[0]?.id
+    ?? memberTeams.find((team) => team.id === params.teamId)?.id
+    ?? memberTeams[0]?.id
   const selectedBacklogId = requestedBacklog?.id
     ?? backlogs.find((backlog) => backlog.teamId === selectedTeamId)?.id
-    ?? backlogs[0]?.id
 
   if (!selectedBacklogId) {
     return {
       backlogs,
+      pendingInvitations,
       recentEvents: [],
       selectedBacklogId,
       selectedTeamId,
+      teamInvitations,
+      teamMembers,
       teams,
       workItems: []
     }
@@ -166,10 +223,13 @@ const loadBacklog = async (client: SupabaseClient, params: LoadBacklogParams = {
 
   return {
     backlogs,
+    pendingInvitations,
     workItems: itemsResult.data.map((row) => mapWorkItem(row, leasesByItem.get(row.id))),
     recentEvents: eventsResult.data.map(mapRunEvent),
     selectedBacklogId,
     selectedTeamId,
+    teamInvitations,
+    teamMembers,
     teams
   }
 }
@@ -194,6 +254,60 @@ export const createCreateWorkItemHandler = createAppRequestHandlerFactory(
     }
 
     return mapWorkItem(data)
+  }
+)
+
+export const createInviteTeamMemberHandler = createAppRequestHandlerFactory(
+  appRequestIdentifiers.inviteTeamMember,
+  ({ client }) => async (request) => {
+    const params = normalizeInviteParams(request.params)
+    const { error } = await client.rpc('invite_team_member', {
+      target_team_id: params.teamId,
+      invitee_email: params.email,
+      target_role: 'member'
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return loadBacklog(client, { teamId: params.teamId })
+  }
+)
+
+export const createAcceptTeamInvitationHandler = createAppRequestHandlerFactory(
+  appRequestIdentifiers.acceptTeamInvitation,
+  ({ client }) => async (request) => {
+    const params = normalizeInvitationActionParams(request.params)
+    const { data, error } = await client.rpc('accept_team_invitation', {
+      target_invitation_id: params.invitationId
+    })
+
+    if (error) {
+      throw error
+    }
+
+    const teamId = typeof data === 'object' && data && 'teamId' in data && typeof data.teamId === 'string'
+      ? data.teamId
+      : undefined
+
+    return loadBacklog(client, { teamId })
+  }
+)
+
+export const createRejectTeamInvitationHandler = createAppRequestHandlerFactory(
+  appRequestIdentifiers.rejectTeamInvitation,
+  ({ client }) => async (request) => {
+    const params = normalizeInvitationActionParams(request.params)
+    const { error } = await client.rpc('reject_team_invitation', {
+      target_invitation_id: params.invitationId
+    })
+
+    if (error) {
+      throw error
+    }
+
+    return loadBacklog(client)
   }
 )
 

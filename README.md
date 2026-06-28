@@ -77,8 +77,10 @@ curl -s http://127.0.0.1:54321/functions/v1/worker \
 
 The authenticated UI is an operator console:
 
-- team and backlog selection
-- backlog board grouped by status
+- left navigation lists team memberships
+- `/` lists teams and pending invitations
+- `/teams/:teamId` shows a team's backlogs, members, pending sent invitations, and invite dialog
+- `/teams/:teamId/backlogs/:backlogId` shows the backlog board grouped by status
 - task creation and status updates
 - task detail with acceptance criteria, active lease, result links, and recent worker events
 - worker API reference at `/api`
@@ -110,4 +112,4 @@ npm run test:security
 npm run all-done
 ```
 
-The security suite follows the Friendly Ledger pattern: it verifies anonymous users cannot call app functions or read/mutate app tables directly, team non-members cannot see or mutate another team's backlog, worker claims are backlog-scoped, and concurrent worker claims cannot lease the same ready item twice.
+The security suite follows the Friendly Ledger pattern: it verifies anonymous users cannot call app functions or read/mutate app tables directly, team non-members cannot see or mutate another team's backlog, member-driven invitations require explicit acceptance, worker claims are backlog-scoped, and concurrent worker claims cannot lease the same ready item twice.

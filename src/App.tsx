@@ -6,6 +6,8 @@ import { ApiReferenceScreen } from './screens/ApiReferenceScreen/ApiReferenceScr
 import { AuthScreen } from './screens/AuthScreen/AuthScreen'
 import { BacklogScreen } from './screens/BacklogScreen/BacklogScreen'
 import { ProfileScreen } from './screens/ProfileScreen/ProfileScreen'
+import { TeamScreen } from './screens/TeamScreen/TeamScreen'
+import { TeamsScreen } from './screens/TeamsScreen/TeamsScreen'
 import { AuthContextProvider } from './contexts/AuthContext'
 
 export const App = () => (
@@ -15,7 +17,9 @@ export const App = () => (
       <Route element={<RequireAuth />}>
         <Route element={<BacklogRouteScope />}>
           <Route element={<ProjectManagementAppFrame />}>
-            <Route index element={<BacklogScreen />} />
+            <Route index element={<TeamsScreen />} />
+            <Route path="teams/:teamId" element={<TeamScreen />} />
+            <Route path="teams/:teamId/backlogs/:backlogId" element={<BacklogScreen />} />
             <Route path="api" element={<ApiReferenceScreen />} />
             <Route path="profile" element={<ProfileScreen />} />
           </Route>

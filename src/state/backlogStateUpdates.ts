@@ -3,7 +3,10 @@ import { sortedWorkItems } from '../domain/backlog/status'
 
 export const emptyBacklogState: BacklogState = {
   backlogs: [],
+  pendingInvitations: [],
   recentEvents: [],
+  teamInvitations: [],
+  teamMembers: [],
   teams: [],
   workItems: []
 }

@@ -1,5 +1,6 @@
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Check, ClipboardList, Plus, RefreshCw, Save } from 'lucide-react'
+import { useParams } from 'react-router-dom'
 import { Button } from '../../../lib/ui/Button/Button'
 import { ComponentRoleContext } from '../../../lib/ui/ComponentRoleContext/ComponentRoleContext'
 import { HeaderWithActions } from '../../../lib/ui/HeaderWithActions/HeaderWithActions'
@@ -259,21 +260,27 @@ export const BacklogScreen = () => {
     createWorkItem,
     readyItems,
     reload,
-    selectBacklog,
-    selectTeam,
     selectedBacklog,
-    selectedTeam,
     state,
     updateWorkItem,
     updateWorkItemStatus
   } = useBacklogContext()
+  const { backlogId } = useParams()
   const [editingItem, setEditingItem] = useState<WorkItem | 'new'>()
   const [selectedItemId, setSelectedItemId] = useState<string>()
   const groupedItems = useMemo(() => workItemsByStatus(state.workItems), [state.workItems])
   const selectedItem = state.workItems.find((item) => item.id === selectedItemId) ?? state.workItems[0]
-  const teamBacklogs = useMemo(() => (
-    state.backlogs.filter((backlog) => backlog.teamId === state.selectedTeamId)
-  ), [state.backlogs, state.selectedTeamId])
+  const routeBacklog = state.backlogs.find((backlog) => backlog.id === backlogId)
+  const currentBacklog = routeBacklog ?? selectedBacklog
+  const currentTeam = state.teams.find((team) => team.id === currentBacklog?.teamId)
+
+  useEffect(() => {
+    if (backlogId && state.selectedBacklogId !== backlogId) {
+      setEditingItem(undefined)
+      setSelectedItemId(undefined)
+      void reload({ backlogId })
+    }
+  }, [backlogId, reload, state.selectedBacklogId])
 
   const saveWorkItem = async (input: WorkItemInput) => {
     if (editingItem && editingItem !== 'new') {
@@ -293,8 +300,8 @@ export const BacklogScreen = () => {
         header={(
           <header className={styles.title}>
             <p>{`${readyItems.length} ready, ${activeLeases.length} leased, ${state.workItems.length} total`}</p>
-            <h2 id="backlog-title">{selectedBacklog?.name ?? 'Agent backlog'}</h2>
-            {selectedTeam && <span>{selectedTeam.name}</span>}
+            <h2 id="backlog-title">{currentBacklog?.name ?? 'Agent backlog'}</h2>
+            {currentTeam && <span>{currentTeam.name}</span>}
           </header>
         )}
         actions={(
@@ -306,7 +313,7 @@ export const BacklogScreen = () => {
               </Button>
             </ComponentRoleContext>
             <ComponentRoleContext role="primary">
-              <Button type="button" disabled={!selectedBacklog} onClick={() => setEditingItem('new')}>
+              <Button type="button" disabled={!currentBacklog} onClick={() => setEditingItem('new')}>
                 <Plus aria-hidden="true" />
                 New task
               </Button>
@@ -316,40 +323,6 @@ export const BacklogScreen = () => {
       />
 
       <LoaderContainer loader={backlogLoad}>
-        <div className={styles.scopeBar} aria-label="Backlog scope">
-          <label>
-            <span>Team</span>
-            <select
-              value={state.selectedTeamId ?? ''}
-              onChange={(event) => {
-                setEditingItem(undefined)
-                setSelectedItemId(undefined)
-                void selectTeam(event.target.value)
-              }}
-            >
-              {state.teams.map((team) => (
-                <option key={team.id} value={team.id}>{team.name}</option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            <span>Backlog</span>
-            <select
-              value={state.selectedBacklogId ?? ''}
-              onChange={(event) => {
-                setEditingItem(undefined)
-                setSelectedItemId(undefined)
-                void selectBacklog(event.target.value)
-              }}
-            >
-              {teamBacklogs.map((backlog) => (
-                <option key={backlog.id} value={backlog.id}>{backlog.name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
         <div className={styles.layout}>
           <div className={styles.board} aria-label="Backlog board">
             {groupedItems.map((group) => (
@@ -384,7 +357,7 @@ export const BacklogScreen = () => {
             {editingItem ? (
               <Section title={editingItem === 'new' ? 'New task' : 'Edit task'}>
                 <WorkItemForm
-                  backlogId={selectedBacklog?.id ?? ''}
+                  backlogId={currentBacklog?.id ?? ''}
                   busy={backlogLoad.busy}
                   item={editingItem === 'new' ? undefined : editingItem}
                   onCancel={() => setEditingItem(undefined)}

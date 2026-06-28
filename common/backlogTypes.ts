@@ -49,6 +49,25 @@ export type Team = {
   slug: string
 }
 
+export type TeamMember = {
+  id: string
+  teamId: string
+  userId: string
+  role: string
+  memberKind: string
+  displayName: string
+  createdAt: string
+}
+
+export type TeamInvitation = {
+  id: string
+  teamId: string
+  email: string
+  role: string
+  acceptedAt?: string
+  createdAt: string
+}
+
 export type Backlog = {
   id: string
   teamId: string
@@ -59,10 +78,13 @@ export type Backlog = {
 
 export type BacklogState = {
   backlogs: Backlog[]
+  pendingInvitations: TeamInvitation[]
   workItems: WorkItem[]
   recentEvents: RunEvent[]
   selectedBacklogId?: string
   selectedTeamId?: string
+  teamInvitations: TeamInvitation[]
+  teamMembers: TeamMember[]
   teams: Team[]
 }
 
@@ -81,6 +103,15 @@ export type WorkItemInput = {
 export type LoadBacklogParams = {
   backlogId?: string
   teamId?: string
+}
+
+export type InviteTeamMemberParams = {
+  email: string
+  teamId: string
+}
+
+export type TeamInvitationActionParams = {
+  invitationId: string
 }
 
 export type WorkerClaim = {

@@ -1,4 +1,12 @@
-import type { ActiveLease, Backlog, RunEvent, Team, WorkItem } from '../../../common/backlogTypes.ts'
+import type {
+  ActiveLease,
+  Backlog,
+  RunEvent,
+  Team,
+  TeamInvitation,
+  TeamMember,
+  WorkItem
+} from '../../../common/backlogTypes.ts'
 
 type WorkItemRow = {
   id: string
@@ -29,6 +37,25 @@ type BacklogRow = {
   name: string
   slug: string
   description: string
+}
+
+type TeamMemberRow = {
+  id: string
+  team_id: string
+  user_id: string
+  role: string
+  member_kind: string
+  display_name: string
+  created_at: string
+}
+
+type TeamInvitationRow = {
+  id: string
+  team_id: string
+  email: string
+  role: string
+  accepted_at?: string | null
+  created_at: string
 }
 
 type LeaseRow = {
@@ -85,6 +112,25 @@ export const mapBacklog = (row: BacklogRow): Backlog => ({
   name: row.name,
   slug: row.slug,
   description: row.description
+})
+
+export const mapTeamMember = (row: TeamMemberRow): TeamMember => ({
+  id: row.id,
+  teamId: row.team_id,
+  userId: row.user_id,
+  role: row.role,
+  memberKind: row.member_kind,
+  displayName: row.display_name,
+  createdAt: row.created_at
+})
+
+export const mapTeamInvitation = (row: TeamInvitationRow): TeamInvitation => ({
+  id: row.id,
+  teamId: row.team_id,
+  email: row.email,
+  role: row.role,
+  acceptedAt: row.accepted_at ?? undefined,
+  createdAt: row.created_at
 })
 
 export const mapRunEvent = (row: EventRow): RunEvent => ({

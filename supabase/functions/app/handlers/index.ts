@@ -1,8 +1,11 @@
 import { createRequestHandlers } from '../../../../lib/dispatch/dispatch.ts'
 import type { AppInvocationContext } from '../types/context.ts'
 import {
+  createAcceptTeamInvitationHandler,
   createCreateWorkItemHandler,
+  createInviteTeamMemberHandler,
   createLoadBacklogHandler,
+  createRejectTeamInvitationHandler,
   createUpdateWorkItemHandler,
   createUpdateWorkItemStatusHandler
 } from './backlog.ts'
@@ -10,6 +13,9 @@ import {
 const handlerFactories = [
   createLoadBacklogHandler,
   createCreateWorkItemHandler,
+  createInviteTeamMemberHandler,
+  createAcceptTeamInvitationHandler,
+  createRejectTeamInvitationHandler,
   createUpdateWorkItemHandler,
   createUpdateWorkItemStatusHandler
 ]
